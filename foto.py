@@ -1,140 +1,129 @@
 from PIL import Image
-from PIL.ExifTags import TAGS, GPSTAGS
+from PIL.ExifTags import TAGS, GPSTAGS, IFD
 
-try: 
-	import pillow_heif
-	pillow_heif.register_heif_opener()
-	HEIC_AKTIF = True
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+    HEIC_AKTIF = True
 except ImportError:
-	HEIC_AKTIF = False
+    HEIC_AKTIF = False
+
 
 def ambil_exif(path):
-	img = Image.open(path)
+    img = Image.open(path)
+    raw = img.getexif()
 
-	exif = None
+    if not raw:
+        return None
 
-	try:
-		exif = img_getexif()
-	except (AttributeError, Exception):
-		exif = None
+    data = {}
 
-	if not exif:
-		try:
-			raw = img.img_getexif()
+    for tag_id, value in raw.items():
+        tag = TAGS.get(tag_id, tag_id)
+        if tag == "GPSInfo":
+            continue  # pointer int, GPS dibaca terpisah di bawah
+        data[tag] = value
 
-			if raw:
-				exif = dict(raw)
+    # GPS IFD - dibaca lewat get_ifd, bukan dari value tag GPSInfo
+    try:
+        gps_ifd = raw.get_ifd(IFD.GPSInfo)
+        if gps_ifd:
+            data["GPSInfo"] = dict(gps_ifd)
+    except Exception:
+        pass
 
-				from PIL.ExifTags import IFD 
+    return data
 
-				try:
-					gps_ifd = raw.get_ifd(IFD.GPSInfo)\
 
-					if gps_fild:
-						exif[34853] = dict(gps_fild)
+def ambil_gps(exif):
+    if not exif or "GPSInfo" not in exif:
+        return None
 
-				except Exception:
-					pass
-		except Exception:
-			exif : None
-		
-	if not exif:
-		return None
+    gps = {}
+    for key, value in exif["GPSInfo"].items():
+        nama = GPSTAGS.get(key, key)
+        gps[nama] = value
 
-	data = {}
+    return gps
 
-	for tag_id, value in exif.items():
-		tag = TGAS.get(tag_id, tag_id)
-		data[tag] = value
 
-	return data 
+def ke_derajat(nilai):
+    d, m, s = nilai
+    return float(d) + float(m) / 60 + float(s) / 3600
 
-def ambil_hps(exif):
-	if not exif or "GPSInfo" not in exif:
-		return None
 
-	gps = {}
+def koordinat_desimal(gps):
+    if not gps:
+        return None
 
-	for key, value in exif["GPSInfo"].items():
-		nama = GPSTAGS.get(key, key)
-		gps[nama] = value
+    if "GPSLatitude" not in gps or "GPSLongitude" not in gps:
+        return None
 
-	return gps
+    lat = ke_derajat(gps["GPSLatitude"])
+    lon = ke_derajat(gps["GPSLongitude"])
 
-def ke_derajat(exif):
-	d, m, s = nilai
-	return float(d) + float(m) /60 + float(s) /3600
+    if gps.get("GPSLatitudeRef") == "S":
+        lat = -lat
 
-def koodinat_desimal(gps):
-	if not gps:
-		return None
+    if gps.get("GPSLongitudeRef") == "W":
+        lon = -lon
 
-	if "GPSLatitude" not in gps or "GPSLatitude" not in gps:
-		return None
+    return lat, lon
 
-		lat = ke_derajat(gps["GPSLatitude"])
-		lon = ke_derajat(gps["GPSLongitude"])
-
-		if gps.get("GPSLatitudeRef") == "S":
-			lat = -lat
-
-		if gps.get("GPSLongitudeRef") == "W":
-			lon = -lon
 
 def cek_satu_foto(path):
-	print("=" *55)
-	print("FOTO : {path}")
-	print("=" *55)
+    print("=" * 55)
+    print(f"FOTO : {path}")
+    print("=" * 55)
 
-	try:
-		exif = ambil_exif(path)
+    try:
+        exif = ambil_exif(path)
 
-	except FileNotFoundError:
-		print("File tidak di temukan \n")
-		return
-	except Exception as e:
+    except FileNotFoundError:
+        print("File tidak ditemukan\n")
+        return
 
-		if 	path.lower().endswith((".heic", ".heif")) and not HEIC_AKTIF:
-			print("FOTO HEIC belum di dukung.")
-			print("install terlebih dahulu")
-			print("pip install pillow_heif\n")
+    except Exception as e:
+        if path.lower().endswith((".heic", ".heif")) and not HEIC_AKTIF:
+            print("FOTO HEIC belum didukung.")
+            print("Install terlebih dahulu:")
+            print("pip install pillow_heif\n")
+        else:
+            print(f"Gagal membaca foto: {e}\n")
+        return
 
-		else:
-			print(f"gagal membaca foto: {e}\n")\
+    if not exif:
+        print("Foto tidak memiliki metadata EXIF.\n")
+        return
 
-		return
+    kamera = exif.get("Make", "")
+    model = exif.get("Model", "")
+    waktu = exif.get("DateTimeOriginal", exif.get("DateTime", ""))
 
-	if not exif:
-		print("Foto tidak memiliki metadata EXIF.\n")
-		return
+    if kamera or model:
+        print(f"Perangkat : {kamera} {model}")
 
-	kamera = exif.get("make","")
-	model = exif.get("Model","")
-	waktu = exif.get("DateTimeOriginal", exif.get("DateTime",""))
+    if waktu:
+        print(f"Tanggal : {waktu}")
 
-	if kamera or model:
-		print(f"mPerangkat : {kamera} {model}")
+    gps = ambil_gps(exif)
+    koor = koordinat_desimal(gps)
 
-	if waktu:
-		print(f"Tanggal: {waktu}")
-	gps = ambil_gps(exif)
-	koor = koordinat_desimal(gps)
+    if koor:
+        lat, lon = koor
 
-	if koor:
-		lat, lon = koordinat_desimal
+        print("\nGPS ditemukan")
+        print(f"Latitude : {lat:.6f}")
+        print(f"Longitude : {lon:.6f}")
+        print(f"Google Maps : https://www.google.com/maps?q={lat},{lon}")
 
-		print("\nGPS ditemukan")
-		print(f"Latitude : {lat:.6f}")
-		print(f"Langitude : {lon:.6f}")
-		print(f"Google Maps : https://www.google.com/maps?q={lat}.{lon}")
+    else:
+        print("\nMetadata GPS tidak ditemukan.")
 
-	else:
-		print("\nMetadata GPSS tidak ditemukan.")\
+    print()
 
-	print()
 
 def main():
-    
     while True:
         path = input("Masukin bro nama fotonya (exit untuk keluar): ").strip()
 

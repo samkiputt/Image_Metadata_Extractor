@@ -28,13 +28,13 @@ Project ini dibuat sebagai project pembelajaran Cyber Security untuk pemula, khu
 # Installation
 Pastikan Python sudah terinstall.
 
-###Clone repository:
+### Clone repository:
 ```bash
 git clone https://github.com/samkiputt/Image_Metadata_Extractor
 cd Image_Metadata_Extractor
 ```
 
-###Install Dependencies
+### Install Dependencies
 ```bash
 pip install Pillow pillow-heif
 ```
